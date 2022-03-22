@@ -1,0 +1,23 @@
+{
+  "name": "popskl",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "watch -d -n 1 'clear && yarn test:unit'",
+    "asp": "asp --verbose --nologo",
+    "test:unit": "yarn asp -f unit.spec",
+    "build": "asb --target debug",
+    "build:release": "asb",
+    "test": "yarn test:unit",
+    "clean": "rm -rf ./build && rm -rf ./neardev && rm -rf ./target",
+    "qr": "qrcode $1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "near-sdk-as": "^1.2.1",
+    "qrcode": "^1.4.4"
+  }
+}
