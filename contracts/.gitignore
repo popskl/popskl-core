@@ -7,6 +7,4 @@ out/
 *.log
 **/target/
 
-.vscode
-
 neardev/

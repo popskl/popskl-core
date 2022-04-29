@@ -17,7 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "near-sdk-as": "^1.2.1",
+    "near-sdk-as": "^3.2.3",
     "qrcode": "^1.4.4"
   }
 }

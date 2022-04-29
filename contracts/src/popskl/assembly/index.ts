@@ -1,12 +1,10 @@
-import { logging, Context, ContractPromise, RNG, PersistentMap, PersistentUnorderedMap, PersistentDeque, PersistentSet } from "near-sdk-as";
+import { Context, RNG, PersistentUnorderedMap } from "near-sdk-as";
 
-import { AccountId, ONE_NEAR, asNEAR, XCC_GAS, MIN_ACCOUNT_BALANCE } from "../../utils";
+import { AccountId } from "../../utils";
 
 type Code = string;
-type Epoch = u64;
 
 const ONE_SECOND: u64 = 1_000_000_000
-const ONE_MINUTE: u64 = 60 * ONE_SECOND;
 
 @nearBindgen
 export class Contract {
@@ -253,17 +251,5 @@ export class Contract {
 
   private assert_reasonable_cooldown(cooldown: i32): void {
     assert(cooldown > 0 && cooldown <= 5 * 60, "Cooldown must be 5 minutes or less (measured in seconds)")
-  }
-
-  private assert_self(): void {
-    const caller = Context.predecessor
-    const self = Context.contractName
-    assert(caller == self, "Only this contract may call itself");
-  }
-
-  private assert_single_promise_success(): void {
-    const x = ContractPromise.getResults()
-    assert(x.length == 1, "Expected exactly one promise result")
-    assert(x[0].succeeded, "Expected PromiseStatus to be successful")
   }
 }
