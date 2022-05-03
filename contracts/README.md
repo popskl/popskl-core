@@ -1,8 +1,27 @@
-# PoPskl
+# PoPskl contract
 
-Proof of Presence done right
+Contract generates and stores codes, that are then confirmed by the users. 
+After confirmation contract stores number of times each user submitted a valid code.
 
-# Terminal-based Demo
+## Deployment
+
+There is a small [deploy script](./scripts/1.deploy.sh). 
+It requires:
+* `OWNER` env variable (master account for the contract)
+* `near` & `yarn` executables
+
+Use it like this:
+```shell
+# by default deploys to testnet, to deploy to other network:
+# export NODE_ENV=local
+OWNER=<account name>.testnet ./scripts/1.deploy.sh
+```
+
+## Usage
+
+See [scripts](./scripts/) directory for examples of contract usage.
+
+## Terminal-based Demo
 
 - The real application would have the QR code visible on some screen at the point of sale
 - the user would open popskl.com to see something like a "pop it!" button that opens a camera view
@@ -11,4 +30,10 @@ Proof of Presence done right
   - (b) prompted to login to NEAR wallet
   - (c) setup a NEAR account if they don't already have one
 
-https://www.loom.com/share/1c17cb44c9c44e5695d4a31f361a9af5
+https://drive.google.com/file/d/1_4ZrHy1Ow_iq4N2Av1Y7Jhiud1Cc8Mcz/view
+
+## Known issues
+
+* currently we're just tracking fact that user confirmed our code, but we actually want to prove that user was at some location
+* contract is essentially single-threaded (i.e. there is only one valid code at a time)
+* we need to add a timeout per each code, to limit time range of location proofs

@@ -6,6 +6,14 @@ type Code = string;
 
 const ONE_SECOND: u64 = 1_000_000_000
 
+/**
+ * Proof of presence contract
+ * 
+ * @param {AccountId} owner
+ * @param {i16} [visitor_cooldown=60] - cooldown between visits in seconds
+ * @param {bool} [track_visitors=true] - should this contract track all visitors
+ * @throws if cooldown is not in range between 1 second and 5 minutes
+ */
 @nearBindgen
 export class Contract {
 
@@ -49,14 +57,14 @@ export class Contract {
   /**
    * An inactive contract does not handle code confirmations
    *
-   * @returns state of the contract as active / inactive
+   * @returns {bool} state of the contract as active / inactive
    */
   get_active(): bool {
     return this.isActive;
   }
 
   /**
-   * @returns AccountId of contract owner
+   * @returns {AccountId} of contract owner
    */
   get_owner(): AccountId {
     return this.owner;
@@ -64,7 +72,8 @@ export class Contract {
 
   /**
    * There can only be one valid code at a time
-   * @returns string currently valid code
+   * 
+   * @returns {string} currently valid code
    */
   get_code(): string {
     return this.valid_code;
@@ -74,8 +83,9 @@ export class Contract {
   // Owner VIEW methods
   // --------------------------------------------------------------------------
 
-  /**
-   * @returns AccountId of last visitor
+  /** 
+   * @returns {AccountId} of last visitor
+   * @throws if called by non-owner
    */
   get_last_visitor(): AccountId {
     this.assert_owner()
@@ -89,11 +99,16 @@ export class Contract {
   /**
    * Confirm PoP code to establish proof of presence
    *
-   * @param code proof of presence code to verify
-   * @returns bool or fails
+   * @param {Code} code - proof of presence code to verify
+   * @returns {bool} true or fails
+   * @throws if contract is inactive
+   * @throws if code is invalid
+   * @throws if code is no longer active
+   * @throws if visitor is the same as previous (e.g. visits twice in a row)
+   * @throws if cooldown time after previous visit hasn't passed
    */
   @mutateState()
-  confirm_code(code: Code): bool {
+  confirm_code(code: Code): true {
     assert(this.isActive, "The system is currently inactive")
 
     this.assert_valid_format(code)
@@ -115,11 +130,13 @@ export class Contract {
 
   /**
    * This method will fail if the contract is not configured to track
-   * visitors.  Also, if the owner of the contract has cleared visitor
+   * visitors. Also, if the owner of the contract has cleared visitor
    * data since this guest confirmed a code then any record of their visit is lost
    *
-   * @param guest account that may have visited in the past
-   * @returns bool indicating whether the guest has visited
+   * @param {AccountId} guest - account that may have visited in the past
+   * @returns {bool} indicating whether the guest has visited
+   * @throws if called by non-owner
+   * @throws if contract is not tracking visitors
    */
   get_has_visited(guest: AccountId): bool {
     this.assert_owner()
@@ -131,7 +148,8 @@ export class Contract {
    * This method may not return any data if the owner of the contract
    * has recently cleared out visitor data
    *
-   * @returns list of visitors
+   * @returns {Array<AccountId>} list of visitors
+   * @throws if called by non-owner
    */
   // TODO: limit using pagination
   get_visitors(page: u16 = 1): Array<AccountId> {
@@ -144,8 +162,9 @@ export class Contract {
    * This method may not return accurate data if the owner of the contract
    * has cleared out visitor data in the lifetime of this contract
 
-   * @param guest account for which we want visit count
-   * @returns u16 representing the number of visits tracked for this guest
+   * @param {AccountId} guest - account for which we want visit count
+   * @returns {u16} representing the number of visits tracked for this guest
+   * @throws if called by non-owner
    */
   get_visit_count(guest: AccountId): u16 {
     this.assert_owner()
@@ -157,12 +176,13 @@ export class Contract {
   }
 
   /**
-   * Clear all visitor data.  Useful as contract storage staking costs grow large
+   * Clear all visitor data. Useful as contract storage staking costs grow large
    *
    * @returns true always
+   * @throws if called by non-owner
    */
   @mutateState()
-  clear_visitor_records(): bool {
+  clear_visitor_records(): true {
     this.assert_owner()
     this.visitors.clear()
     this.last_visitor = '';
@@ -173,7 +193,8 @@ export class Contract {
    * Toggle the active state of the contract. An inactive contract
    * does not handle code confirmations
    *
-   * @returns state of contract as active / inactive
+   * @returns {bool} state of contract as active / inactive
+   * @throws if called by non-owner
    */
   @mutateState()
   toggle_active(): bool {
@@ -186,6 +207,8 @@ export class Contract {
    *
    * @param cooldown number of seconds between repeat visits
    * @returns state of contract as active / inactive
+   * @throws if called by non-owner
+   * @throws if cooldown is not in range between 1 second and 5 minutes
    */
   @mutateState()
   set_cooldown(cooldown: i16): bool {

@@ -1,8 +1,6 @@
 import { u128 } from "near-sdk-as";
 
-/**
- * == TYPES ====================================================================
- */
+// == TYPES ====================================================================
 
 /**
  * Account IDs in NEAR are just strings.
@@ -15,9 +13,8 @@ export type AccountId = string;
 export type Gas = u64;
 
 /**
- * Amounts, Balances, and Money in NEAR is are u128.
+ * Amounts, Balances, and Money in NEAR are u128.
  */
-
 export type Amount = u128;
 
 export type Balance = Amount;
@@ -29,9 +26,9 @@ export type Money = Amount;
  */
 export type Timestamp = u64;
 
+// == CONSTANTS ================================================================
+
 /**
- * == CONSTANTS ================================================================
- *
  * ONE_NEAR = unit of NEAR token in yocto Ⓝ (1e24)
  * XCC_GAS = gas for cross-contract calls, ~5 Tgas (teragas = 1e12) per "hop"
  * MIN_ACCOUNT_BALANCE = 3 NEAR min to keep account alive via storage staking
@@ -44,9 +41,8 @@ export const ONE_NEAR = u128.from("1000000000000000000000000");
 export const XCC_GAS: Gas = 20_000_000_000_000;
 export const MIN_ACCOUNT_BALANCE: u128 = u128.mul(ONE_NEAR, u128.from(3));
 
-/**
- * == FUNCTIONS ================================================================
- */
+
+// == FUNCTIONS ================================================================
 
 /**
  * @function asNEAR
