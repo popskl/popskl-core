@@ -12,15 +12,17 @@ unit-test:
 e2e-test: build
 	cargo test --test '*'
 
-dev-deploy: contract ?= popskl.${account}
-dev-deploy: unit-test build	
-	near delete ${contract} ${account}
-	near create-account ${contract} --masterAccount ${account}
+test: unit-test e2e-test
+
+dev-deploy: contract ?= popskl.${owner}
+dev-deploy: test	
+	-near delete ${contract} ${owner}
+	near create-account ${contract} --masterAccount ${owner}
 
 	near deploy ${contract} \
 		--wasmFile res/popskl.wasm \
 		--initFunction new \
-		--initArgs '{}'
+		--initArgs "{\"owner\": \"${owner}\"}"
 
 build-scripts:
 	cd scripts; \

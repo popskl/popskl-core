@@ -1,10 +1,10 @@
 use crate::*;
 use near_sdk::{
-    env,
     json_types::{Base58CryptoHash, U64},
     serde::Serialize,
-    AccountId, Balance, Duration, Promise, Timestamp,
+    Balance, Duration, Timestamp,
 };
+use near_units::parse_near;
 
 type Issuer = AccountId;
 
@@ -39,14 +39,15 @@ impl Popskl {
     pub fn store_proof(&mut self, hash: Base58CryptoHash, timeout: Option<u32>) -> Timestamp {
         let crypto_hash = CryptoHash::from(hash);
         assert!(
-            !self.proofs.contains_key(&crypto_hash),
+            !self.proofs.contains_key(&crypto_hash)
+                && !self.terminated_proofs.contains_key(&crypto_hash),
             "Proof is already stored!"
         );
 
         let issuer = env::predecessor_account_id();
         let created_at = env::block_timestamp();
 
-        assert_payment(|| {
+        assert_deposit(Some(parse_near!("0.002 N")), || {
             self.proofs.insert(
                 &crypto_hash,
                 &PrivateProof {
@@ -108,7 +109,7 @@ fn to_nanos(seconds: u32) -> u64 {
     u64::from(seconds) * 1_000_000_000
 }
 
-fn assert_payment<F>(storage_update: F)
+fn assert_deposit<F>(additional_payment: Option<u128>, storage_update: F)
 where
     F: FnOnce(),
 {
@@ -116,8 +117,9 @@ where
 
     storage_update();
 
-    let required_cost =
+    let storage_cost =
         Balance::from(env::storage_usage() - initial_storage) * env::storage_byte_cost();
+    let required_cost = storage_cost + additional_payment.unwrap_or(0);
     assert!(
         env::attached_deposit() >= required_cost,
         "Requires {} yoctoNEAR attached.",
@@ -135,16 +137,20 @@ mod tests {
 
     use near_sdk::testing_env;
 
-    use crate::test_commons::{account, context, prepare_context, CREATED_AT, ISSUER, VISITOR};
+    use crate::test_commons::{
+        account, context, popskl, prepare_context, CREATED_AT, ISSUER, VISITOR,
+    };
 
     use super::*;
+
+    const PROOF_PRICE: u128 = 2000000000000000000000;
 
     #[test]
     fn should_store_private_proof() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         testing_env!(context(ISSUER)
-            .attached_deposit(99 * env::storage_byte_cost())
+            .attached_deposit(99 * env::storage_byte_cost() + PROOF_PRICE)
             .build());
         let hash = hash();
 
@@ -162,7 +168,7 @@ mod tests {
     #[should_panic(expected = "already stored")]
     fn should_check_private_proof_uniqueness() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         prepare_context(ISSUER);
         popskl.save_test_proof();
 
@@ -171,11 +177,23 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "already stored")]
+    fn should_check_private_proof_is_not_terminated() {
+        // given
+        let mut popskl = popskl();
+        prepare_context(ISSUER);
+        popskl.save_terminated_proof();
+
+        // when
+        popskl.store_proof(Base58CryptoHash::from(hash()), None);
+    }
+
+    #[test]
     fn should_save_timeout() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         testing_env!(context(ISSUER)
-            .attached_deposit(107 * env::storage_byte_cost())
+            .attached_deposit(107 * env::storage_byte_cost() + PROOF_PRICE)
             .build());
         let hash = hash();
         let timeout = 23;
@@ -194,7 +212,7 @@ mod tests {
     #[should_panic(expected = "attach")]
     fn should_require_payment_for_new_proof() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         prepare_context(ISSUER);
 
         // when
@@ -204,7 +222,7 @@ mod tests {
     #[test]
     fn should_terminate_proof() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         prepare_context(ISSUER);
         popskl.save_test_proof();
         let hash = hash();
@@ -223,7 +241,7 @@ mod tests {
     #[should_panic(expected = "proof owner")]
     fn should_check_ownership_before_termination() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         prepare_context(VISITOR);
         popskl.save_test_proof();
 
@@ -234,7 +252,7 @@ mod tests {
     #[test]
     fn should_validate_proof() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         prepare_context(VISITOR);
         popskl.save_test_proof();
 
@@ -253,7 +271,7 @@ mod tests {
     #[test]
     fn should_validate_terminated_proof() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         prepare_context(VISITOR);
         popskl.save_terminated_proof();
 
@@ -272,7 +290,7 @@ mod tests {
     #[test]
     fn should_validate_non_expired_proof() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         prepare_context(VISITOR);
         let timeout = 60;
         popskl.save_expirable_proof(timeout);
@@ -292,7 +310,7 @@ mod tests {
     #[test]
     fn should_validate_expired_proof() {
         // given
-        let mut popskl = Popskl::new();
+        let mut popskl = popskl();
         let timeout = 60;
         popskl.save_expirable_proof(timeout);
         testing_env!(context(VISITOR)
@@ -314,7 +332,7 @@ mod tests {
     #[test]
     fn should_validate_invalid_proof() {
         // given
-        let popskl = Popskl::new();
+        let popskl = popskl();
         prepare_context(VISITOR);
 
         // when

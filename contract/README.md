@@ -25,10 +25,11 @@ make clean
 make build
 
 # run cargo tests
-make test
+make unit-test
+make e2e-test
 
-# deploy to testnet
-make dev-deploy account=vchernetskyi.testnet
+# deploy to popskl.vchernetskyi.testnet
+make dev-deploy owner=vchernetskyi.testnet
 ```
 
 ## CLI Usage
@@ -39,9 +40,13 @@ Usage examples assume that you've `dev-deploy`ed popskl contract.
 
 Set accounts:
 ```bash
-ACCOUNT=vchernetskyi.testnet
-CONTRACT=popskl.$ACCOUNT
+OWNER=vchernetskyi.testnet
+ISSUER=$OWNER
+VISITOR=$OWNER
+CONTRACT=popskl1.$OWNER
 ```
+**Note:** For test purposes we are using the same account for owner, issuer and visitor.
+In real life those are (probably?) 3 different persons.
 
 Build utility scripts:
 ```bash
@@ -51,8 +56,8 @@ make build-scripts
 Generate decoded proof:
 ```bash
 LOCATION="My Custom Location"
-SECRET=$(node scripts/popskl-helper.js secret)
-HASH=$(node scripts/popskl-helper.js hash "$LOCATION" "$SECRET")
+SECRET=$(node scripts/out/popskl-helper.js secret)
+HASH=$(node scripts/out/popskl-helper.js hash "$LOCATION" "$SECRET")
 ```
 
 ### Interact
@@ -62,25 +67,31 @@ Issue new location proof:
 # without timeout
 near call $CONTRACT store_proof \
     --args "{\"hash\": \"$HASH\"}" \
-    --accountId $ACCOUNT \
-    --depositYocto 1060000000000000000000
+    --accountId $ISSUER \
+    --depositYocto 3060000000000000000000
 
-# without timeout in seconds
+# with timeout in seconds
 near call $CONTRACT store_proof \
     --args "{\"hash\": \"$HASH\", \"timeout\": 60}" \
-    --accountId $ACCOUNT \
-    --depositYocto 1140000000000000000000
+    --accountId $ISSUER \
+    --depositYocto 3140000000000000000000
 ```
-**Note:** `store_proof` charges for proof storage; any excessive attached deposit is refunded.
+**Note:** `store_proof` charges for proof storage and additionally 0.002 NEAR.
+Any excessive attached deposit is refunded.
 
 Terminate private location proof:
 ```bash
 near call $CONTRACT terminate_proof \
     --args "{\"hash\": \"$HASH\"}" \
-    --accountId $ACCOUNT
+    --accountId $ISSUER
 ```
 
 Validate location proof:
 ```bash
 near view $CONTRACT validate_proof --args "{\"hash\": \"$HASH\"}"
+```
+
+Withdraw funds:
+```bash
+near call $CONTRACT withdraw_funds --accountId $OWNER
 ```
