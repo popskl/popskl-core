@@ -6,11 +6,14 @@ build:
 clean:
 	rm -rf target res
 
-test:
-	cargo test -- --nocapture
+unit-test:
+	cargo test --lib -- --nocapture
+
+e2e-test: build
+	cargo test --test '*'
 
 dev-deploy: contract ?= popskl.${account}
-dev-deploy: test build	
+dev-deploy: unit-test build	
 	near delete ${contract} ${account}
 	near create-account ${contract} --masterAccount ${account}
 
@@ -18,3 +21,8 @@ dev-deploy: test build
 		--wasmFile res/popskl.wasm \
 		--initFunction new \
 		--initArgs '{}'
+
+build-scripts:
+	cd scripts; \
+		npm install; \
+		npx tsc

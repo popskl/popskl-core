@@ -1,13 +1,36 @@
 use crate::*;
 use near_sdk::{
-    env, json_types::Base58CryptoHash, AccountId, Balance, Duration, Promise, Timestamp,
+    env,
+    json_types::{Base58CryptoHash, U64},
+    serde::Serialize,
+    AccountId, Balance, Duration, Promise, Timestamp,
 };
+
+type Issuer = AccountId;
 
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct PrivateProof {
-    issuer: AccountId,
+    issuer: Issuer,
     created_at: Timestamp,
     timeout: Option<Duration>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ProofView {
+    issuer: Issuer,
+    #[serde(rename(serialize = "createdAt"))]
+    created_at: U64,
+    timeout: Option<U64>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
+pub enum ProofStatus {
+    Invalid,
+    Terminated(ProofView),
+    Expired(ProofView),
+    Valid(ProofView),
 }
 
 #[near_bindgen]
@@ -47,6 +70,38 @@ impl Popskl {
 
         self.terminated_proofs.insert(&crypto_hash, &proof);
     }
+
+    pub fn validate_proof(&self, hash: Base58CryptoHash) -> ProofStatus {
+        let crypro_hash = CryptoHash::from(hash);
+        self.proofs
+            .get(&crypro_hash)
+            .map(|proof| {
+                proof
+                    .timeout
+                    .filter(|timeout| (proof.created_at + timeout) < env::block_timestamp())
+                    .map(|_| ProofStatus::Expired(ProofView::from(&proof)))
+                    .or_else(|| Some(ProofStatus::Valid(ProofView::from(&proof))))
+            })
+            .flatten()
+            .or_else(|| {
+                self.terminated_proofs
+                    .get(&crypro_hash)
+                    .as_ref()
+                    .map(ProofView::from)
+                    .map(ProofStatus::Terminated)
+            })
+            .unwrap_or(ProofStatus::Invalid)
+    }
+}
+
+impl From<&PrivateProof> for ProofView {
+    fn from(proof: &PrivateProof) -> Self {
+        Self {
+            issuer: proof.issuer.clone(),
+            created_at: proof.created_at.into(),
+            timeout: proof.timeout.map(U64::from),
+        }
+    }
 }
 
 fn to_nanos(seconds: u32) -> u64 {
@@ -70,7 +125,6 @@ where
     );
     let refund = env::attached_deposit() - required_cost;
     if refund > 0 {
-        // TODO: add integration test that checks refund
         Promise::new(env::predecessor_account_id()).transfer(refund);
     }
 }
@@ -81,7 +135,7 @@ mod tests {
 
     use near_sdk::testing_env;
 
-    use crate::test_commons::{account, context, prepare_context, ISSUER, TIMESTAMP, VISITOR};
+    use crate::test_commons::{account, context, prepare_context, CREATED_AT, ISSUER, VISITOR};
 
     use super::*;
 
@@ -95,15 +149,13 @@ mod tests {
         let hash = hash();
 
         // when
-        let timestamp = popskl.store_proof(Base58CryptoHash::from(hash), Option::None);
+        let timestamp = popskl.store_proof(Base58CryptoHash::from(hash), None);
 
         // then
-        assert_eq!(timestamp, TIMESTAMP);
+        assert_eq!(timestamp, CREATED_AT);
         assert!(popskl.proofs.contains_key(&hash));
         let stored = popskl.proofs.get(&hash).unwrap();
-        assert_eq!(stored.issuer, account(ISSUER));
-        assert_eq!(stored.created_at, TIMESTAMP);
-        assert_eq!(stored.timeout, Option::None);
+        assert_proof(stored, test_proof());
     }
 
     #[test]
@@ -115,7 +167,7 @@ mod tests {
         popskl.save_test_proof();
 
         // when
-        popskl.store_proof(Base58CryptoHash::from(hash()), Option::None);
+        popskl.store_proof(Base58CryptoHash::from(hash()), None);
     }
 
     #[test]
@@ -129,18 +181,13 @@ mod tests {
         let timeout = 23;
 
         // when
-        let timestamp = popskl.store_proof(Base58CryptoHash::from(hash), Option::Some(timeout));
+        let timestamp = popskl.store_proof(Base58CryptoHash::from(hash), Some(timeout));
 
         // then
-        assert_eq!(timestamp, TIMESTAMP);
+        assert_eq!(timestamp, CREATED_AT);
         assert!(popskl.proofs.contains_key(&hash));
         let stored = popskl.proofs.get(&hash).unwrap();
-        assert_eq!(stored.issuer, account(ISSUER));
-        assert_eq!(stored.created_at, TIMESTAMP);
-        assert_eq!(
-            stored.timeout,
-            Option::Some((timeout as u64) * 1_000_000_000)
-        );
+        assert_proof(stored, expirable_proof((timeout as u64) * 1_000_000_000));
     }
 
     #[test]
@@ -151,7 +198,7 @@ mod tests {
         prepare_context(ISSUER);
 
         // when
-        popskl.store_proof(Base58CryptoHash::from(hash()), Option::None);
+        popskl.store_proof(Base58CryptoHash::from(hash()), None);
     }
 
     #[test]
@@ -168,11 +215,8 @@ mod tests {
         // then
         assert!(!popskl.proofs.contains_key(&hash));
         assert!(popskl.terminated_proofs.contains_key(&hash));
-        let expected = test_proof();
         let terminated = popskl.terminated_proofs.get(&hash).unwrap();
-        assert_eq!(terminated.issuer, expected.issuer);
-        assert_eq!(terminated.created_at, expected.created_at);
-        assert_eq!(terminated.timeout, expected.timeout);
+        assert_proof(terminated, test_proof());
     }
 
     #[test]
@@ -187,6 +231,102 @@ mod tests {
         popskl.terminate_proof(Base58CryptoHash::from(hash()));
     }
 
+    #[test]
+    fn should_validate_proof() {
+        // given
+        let mut popskl = Popskl::new();
+        prepare_context(VISITOR);
+        popskl.save_test_proof();
+
+        // when
+        let result = popskl.validate_proof(Base58CryptoHash::from(hash()));
+
+        // then
+        match result {
+            ProofStatus::Valid(proof) => {
+                assert_view(proof, test_proof());
+            }
+            _ => panic!("Proof should be valid!"),
+        }
+    }
+
+    #[test]
+    fn should_validate_terminated_proof() {
+        // given
+        let mut popskl = Popskl::new();
+        prepare_context(VISITOR);
+        popskl.save_terminated_proof();
+
+        // when
+        let result = popskl.validate_proof(Base58CryptoHash::from(hash()));
+
+        // then
+        match result {
+            ProofStatus::Terminated(proof) => {
+                assert_view(proof, test_proof());
+            }
+            _ => panic!("Proof should be terminated!"),
+        }
+    }
+
+    #[test]
+    fn should_validate_non_expired_proof() {
+        // given
+        let mut popskl = Popskl::new();
+        prepare_context(VISITOR);
+        let timeout = 60;
+        popskl.save_expirable_proof(timeout);
+
+        // when
+        let result = popskl.validate_proof(Base58CryptoHash::from(hash()));
+
+        // then
+        match result {
+            ProofStatus::Valid(proof) => {
+                assert_view(proof, expirable_proof(timeout));
+            }
+            _ => panic!("Proof should be valid!"),
+        }
+    }
+
+    #[test]
+    fn should_validate_expired_proof() {
+        // given
+        let mut popskl = Popskl::new();
+        let timeout = 60;
+        popskl.save_expirable_proof(timeout);
+        testing_env!(context(VISITOR)
+            .block_timestamp(CREATED_AT + timeout + 1)
+            .build());
+
+        // when
+        let result = popskl.validate_proof(Base58CryptoHash::from(hash()));
+
+        // then
+        match result {
+            ProofStatus::Expired(proof) => {
+                assert_view(proof, expirable_proof(timeout));
+            }
+            _ => panic!("Proof should be expired!"),
+        }
+    }
+
+    #[test]
+    fn should_validate_invalid_proof() {
+        // given
+        let popskl = Popskl::new();
+        prepare_context(VISITOR);
+
+        // when
+        let result = popskl.validate_proof(Base58CryptoHash::from(hash()));
+
+        // then
+        match result {
+            ProofStatus::Invalid => {}
+            _ => panic!("Proof should be invalid!"),
+        }
+    }
+
     fn hash() -> CryptoHash {
         CryptoHash::try_from(env::keccak256("12345".as_bytes())).unwrap()
     }
@@ -194,8 +334,16 @@ mod tests {
     fn test_proof() -> PrivateProof {
         PrivateProof {
             issuer: account(ISSUER),
-            created_at: TIMESTAMP,
-            timeout: Option::None,
+            created_at: CREATED_AT,
+            timeout: None,
+        }
+    }
+
+    fn expirable_proof(timeout: u64) -> PrivateProof {
+        PrivateProof {
+            issuer: account(ISSUER),
+            created_at: CREATED_AT,
+            timeout: Some(timeout),
         }
     }
 
@@ -203,5 +351,25 @@ mod tests {
         fn save_test_proof(&mut self) {
             self.proofs.insert(&hash(), &test_proof());
         }
+
+        fn save_terminated_proof(&mut self) {
+            self.terminated_proofs.insert(&hash(), &test_proof());
+        }
+
+        fn save_expirable_proof(&mut self, timeout: u64) {
+            self.proofs.insert(&hash(), &expirable_proof(timeout));
+        }
+    }
+
+    fn assert_proof(actual: PrivateProof, expected: PrivateProof) {
+        assert_eq!(actual.issuer, expected.issuer);
+        assert_eq!(actual.created_at, expected.created_at);
+        assert_eq!(actual.timeout, expected.timeout);
+    }
+
+    fn assert_view(actual: ProofView, expected: PrivateProof) {
+        assert_eq!(actual.issuer, expected.issuer);
+        assert_eq!(actual.created_at, expected.created_at.into());
+        assert_eq!(actual.timeout, expected.timeout.map(U64::from));
     }
 }

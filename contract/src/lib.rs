@@ -36,7 +36,7 @@ mod test_commons {
 
     pub const ISSUER: &str = "alice.testnet";
     pub const VISITOR: &str = "bob.testnet";
-    pub const TIMESTAMP: Timestamp = 123456;
+    pub const CREATED_AT: Timestamp = 123456;
 
     pub fn prepare_context(predecessor: &str) {
         let context = context(predecessor).build();
@@ -48,7 +48,7 @@ mod test_commons {
 
         builder
             .predecessor_account_id(account(predecessor))
-            .block_timestamp(TIMESTAMP);
+            .block_timestamp(CREATED_AT);
 
         builder
     }

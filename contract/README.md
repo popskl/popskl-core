@@ -43,18 +43,16 @@ ACCOUNT=vchernetskyi.testnet
 CONTRACT=popskl.$ACCOUNT
 ```
 
-Build helper script(s):
+Build utility scripts:
 ```bash
-cd scripts
-npm install
-npx tsc
+make build-scripts
 ```
 
 Generate decoded proof:
 ```bash
 LOCATION="My Custom Location"
-SECRET=$(node popskl-helper.js secret)
-HASH=$(node popskl-helper.js hash "$LOCATION" "$SECRET")
+SECRET=$(node scripts/popskl-helper.js secret)
+HASH=$(node scripts/popskl-helper.js hash "$LOCATION" "$SECRET")
 ```
 
 ### Interact
@@ -80,4 +78,9 @@ Terminate private location proof:
 near call $CONTRACT terminate_proof \
     --args "{\"hash\": \"$HASH\"}" \
     --accountId $ACCOUNT
+```
+
+Validate location proof:
+```bash
+near view $CONTRACT validate_proof --args "{\"hash\": \"$HASH\"}"
 ```
