@@ -1,0 +1,16 @@
+{
+  "description": "Scripts for interacting with PoPskl contract",
+  "type": "module",
+  "dependencies": {
+    "bs58": "^5.0.0",
+    "crypto-random-string": "^5.0.0",
+    "keccak256": "^1.0.6",
+    "ts-node": "^10.7.0",
+    "yargs": "^17.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^17.0.34",
+    "@types/yargs": "^17.0.10",
+    "prettier": "^2.6.2"
+  }
+}
